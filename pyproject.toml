@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "DyGRAV: Dynamic Grounding & Relational Reasoning for VLN"
 requires-python = ">=3.10"
 readme = "README.md"
-license = {text="MIT"}
+license = "MIT"
 
 # Keep runtime deps minimal so unit tests pass without heavy installs.
 dependencies = [
@@ -35,6 +35,10 @@ dev = [
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["dygrav*"]
+exclude = ["configs*", "scripts*", "tests*", "docs*"]
 
 [tool.ruff]
 line-length = 100
