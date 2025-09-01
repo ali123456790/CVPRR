@@ -1,0 +1,5 @@
+trainer:
+  max_epochs: 1
+  precision: 16
+optimizer:
+  lr: 1e-4

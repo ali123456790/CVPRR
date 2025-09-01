@@ -1,0 +1,3 @@
+name: openclip_vitL14
+model_name: ViT-L-14
+pretrained: openai

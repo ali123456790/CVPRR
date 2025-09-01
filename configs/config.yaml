@@ -1,0 +1,16 @@
+defaults:
+  - data: rxr
+  - model: backbone_hamt
+  - model@dygrav: dygrav
+  - vlm: openclip_vitL14
+  - train: default
+  - eval: rxr_fg
+
+seed: 17
+device: cuda
+precision: 16
+
+logging:
+  level: INFO
+  jsonl: true
+  dir: experiments/${now:%Y-%m-%d}/${now:%H-%M-%S}
