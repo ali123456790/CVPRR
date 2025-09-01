@@ -10,6 +10,8 @@ dist/
 build/
 *.egg-info/
 
-# Data/outputs
-data/
+# Data/outputs (exclude actual datasets, but allow code modules)
+/data/
 experiments/
+*.data
+datasets/
