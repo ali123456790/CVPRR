@@ -63,6 +63,11 @@ def run_eval(n: int = 50) -> Dict[str, float]:
     trigger_rate = triggers / max(1, n)
     ga = np.mean(gas) if gas else 0.0
     
+    # Guardrail (tunable later on real val): keep trigger rate under a soft cap.
+    # This does NOT raise on synthetic; it's a placeholder pattern.
+    if triggers / max(1, n) > 0.30:
+        pass  # when RxR is wired, turn this into a warning or assertion in CI
+    
     return {
         "trigger_rate": trigger_rate,
         "GA": ga,
