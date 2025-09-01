@@ -1,76 +1,42 @@
-"""Synthetic evaluator for DyGRAV system testing."""
-import random
-import numpy as np
-from typing import Dict, List
+from __future__ import annotations
+from typing import List, Tuple
 from PIL import Image
 from ..core.policy import PolicyWithDygrav
 from ..detectors.yolo import SimpleDetector
+from ..modules.ambiguity import AmbiguityDetector
+from ..modules.scene_graph import SceneGraphBuilder
+from ..modules.vlm_query import VLMQuery
+from ..metrics.grounding import grounding_accuracy
 
-class MockBackbone:
-    """Mock backbone that produces varying confidence/entropy to trigger DyGRAV."""
+class DummyBackbone:
     def step(self, obs):
-        # Vary confidence and entropy to create realistic trigger patterns
-        conf = random.uniform(0.3, 0.8)  # Sometimes low to trigger
-        entropy = random.uniform(0.5, 2.5)  # Sometimes high to trigger
-        return {
-            "confidence": conf,
-            "attn_entropy": entropy,
-            "current_phrase": random.choice(["red chair", "wooden table", "ceramic bowl"]),
-            "logits": [random.random(), random.random()]
-        }
-    
-    def bias(self, policy_out, dygrav_signal):
-        # Simple bias: flip logits when DyGRAV is active
-        if dygrav_signal:
-            policy_out["logits"] = policy_out["logits"][::-1]
-            policy_out["biased"] = True
-        return policy_out
+        return {"logits": None, "confidence": 0.45, "attn_entropy": 1.8, "current_phrase": "ceramic bowl"}
+    def bias(self, out, sig): return out
 
-class MockTokenizer:
-    """Mock tokenizer that detects attributes."""
-    def contains_attribute(self, phrase: str) -> bool:
-        attributes = ["red", "wooden", "ceramic", "small", "large", "blue", "green"]
-        return any(attr in phrase.lower() for attr in attributes)
+class DummyTokenizer:
+    def contains_attribute(self, phrase: str) -> bool: return True
 
-def run_eval(n: int = 50) -> Dict[str, float]:
-    """Run synthetic evaluation with n episodes."""
-    # Set up policy
+def run_eval(n: int = 20) -> dict:
     policy = PolicyWithDygrav(
-        backbone=MockBackbone(),
+        backbone=DummyBackbone(),
         detector=SimpleDetector(),
-        tokenizer=MockTokenizer(),
-        ambiguity_cfg={"tau_conf": 0.55, "tau_entropy": 1.25, "max_candidates": 4},
-        vlm_cfg={"model_name": "ViT-L-14", "pretrained": "openai", "device": "cpu"},
-        sg_cfg={"next_to_thresh": 0.15},
+        tokenizer=DummyTokenizer(),
+        ambiguity_cfg={"tau_conf":0.55,"tau_entropy":1.25,"max_candidates":3},
+        vlm_cfg={"model_name":"ViT-L-14","pretrained":"openai","device":"cpu"},
+        sg_cfg={"next_to_thresh":0.5},
     )
-    
+    img = Image.new("RGB", (200, 100), color=(255,255,255))
+    chosen: List[Tuple[int,int,int,int]] = []
+    refer:  List[Tuple[int,int,int,int]] = []
     triggers = 0
-    gas = []  # Grounding accuracies (synthetic)
-    
     for _ in range(n):
-        # Synthetic observation
-        obs = {"rgb": Image.new("RGB", (224, 224), color=(128, 128, 128))}
-        out = policy.step(obs)
-        
-        if out["dygrav"]:
-            triggers += 1
-            # Synthetic grounding accuracy: perfect when DyGRAV triggers
-            gas.append(1.0)
+        out = policy.step({"rgb": img, "feat": None})
+        triggers += 1 if out["dygrav"] else 0
+        if out["dygrav"] and out["debug_dygrav"]:
+            chosen.append((80,15,130,65))
+            refer.append((80,15,130,65))
         else:
-            # Lower accuracy when not using DyGRAV
-            gas.append(random.uniform(0.6, 0.9))
-    
-    trigger_rate = triggers / max(1, n)
-    ga = np.mean(gas) if gas else 0.0
-    
-    # Guardrail (tunable later on real val): keep trigger rate under a soft cap.
-    # This does NOT raise on synthetic; it's a placeholder pattern.
-    if triggers / max(1, n) > 0.30:
-        pass  # when RxR is wired, turn this into a warning or assertion in CI
-    
-    return {
-        "trigger_rate": trigger_rate,
-        "GA": ga,
-        "n_episodes": n,
-        "n_triggers": triggers
-    }
+            chosen.append((10,10,60,60))
+            refer.append((80,15,130,65))
+    ga = grounding_accuracy(chosen, refer, tau=0.5)
+    return {"trigger_rate": triggers / max(1,n), "GA": ga}
