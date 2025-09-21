@@ -7,6 +7,7 @@ import time
 from collections import defaultdict
 from PIL import Image
 import numpy as np
+import json
 
 from ..core.policy import PolicyWithDygrav
 from ..core.types import Region
@@ -127,16 +128,18 @@ class BackboneWrapper:
     
     def _load_hamt(self, checkpoint_path: Optional[str]):
         """Load HAMT or similar transformer backbone"""
-        # Import your actual model here
-        # from models.hamt import HAMT
-        # model = HAMT.load_from_checkpoint(checkpoint_path) if checkpoint_path else HAMT()
-        # For now, return enhanced dummy
-        return EnhancedDummyBackbone()
+        try:
+            from ..backbones.hamt_wrapper import HAMTWrapper
+            model = HAMTWrapper(model_config={"name": "hamt_eval"}, checkpoint_path=checkpoint_path)
+            model.to(self.device)
+            model.eval()
+            return model
+        except Exception as e:
+            raise RuntimeError(f"Failed to load HAMT backbone: {e}")
     
     def _load_custom(self, checkpoint_path: Optional[str]):
         """Load custom backbone"""
-        # Implement custom loading logic
-        return EnhancedDummyBackbone()
+        raise NotImplementedError("Custom backbone loading not implemented. Provide a valid type.")
     
     def step(self, obs: Dict[str, Any]) -> Dict[str, Any]:
         return self.backbone.step(obs)
@@ -236,8 +239,7 @@ class DatasetLoader:
     def _load_rxr(self) -> List[Dict[str, Any]]:
         """Load RxR dataset"""
         if not self.data_path:
-            print("Warning: No RxR data path provided, using synthetic data")
-            return self._load_synthetic()
+            raise FileNotFoundError("RxR data path not provided. Pass data_path to use real dataset.")
         
         try:
             from ..data.rxr_dataset import create_rxr_dataset
@@ -254,15 +256,12 @@ class DatasetLoader:
             return self._convert_episodes_to_dict(dataset.episodes)
             
         except Exception as e:
-            if self.verbose:
-                print(f"Warning: Could not load RxR dataset: {e}")
-            return self._load_synthetic()
+            raise RuntimeError(f"Failed to load RxR dataset: {e}")
     
     def _load_rxr_fg(self) -> List[Dict[str, Any]]:
         """Load RxR-FG (fine-grained) subset"""
         if not self.data_path:
-            print("Warning: No RxR-FG data path provided, using synthetic data")
-            return self._load_synthetic()
+            raise FileNotFoundError("RxR-FG data path not provided. Pass data_path to use real dataset.")
         
         try:
             from ..data.rxr_dataset import create_rxr_fg_dataset
@@ -282,15 +281,12 @@ class DatasetLoader:
             return self._convert_episodes_to_dict(dataset.episodes)
             
         except Exception as e:
-            if self.verbose:
-                print(f"Warning: Could not load RxR-FG dataset: {e}")
-            return self._load_synthetic()
+            raise RuntimeError(f"Failed to load RxR-FG dataset: {e}")
     
     def _load_r2r(self) -> List[Dict[str, Any]]:
         """Load R2R dataset"""
         if not self.data_path:
-            print("Warning: No R2R data path provided, using synthetic data")
-            return self._load_synthetic()
+            raise FileNotFoundError("R2R data path not provided. Pass data_path to use real dataset.")
         
         try:
             from ..data.r2r_dataset import create_r2r_dataset
@@ -306,9 +302,7 @@ class DatasetLoader:
             return self._convert_episodes_to_dict(dataset.episodes)
             
         except Exception as e:
-            if self.verbose:
-                print(f"Warning: Could not load R2R dataset: {e}")
-            return self._load_synthetic()
+            raise RuntimeError(f"Failed to load R2R dataset: {e}")
     
     def _convert_episodes_to_dict(self, episodes) -> List[Dict[str, Any]]:
         """Convert Episode objects to dictionary format for evaluation"""
@@ -420,6 +414,17 @@ class Evaluator:
         # Initialize metrics storage
         self.episode_results = []
         self.metrics = EvalMetrics()
+        # Gate metrics
+        self._gate_preds = []
+        self._gate_labels = []
+        # Cost accuracy tracking
+        self._cost_errors = []
+        # Try to load cost LUT if present
+        try:
+            with open("configs/cost_lut.json", "r") as f:
+                self.cost_lut = json.load(f)
+        except Exception:
+            self.cost_lut = {}
     
     def _get_tokenizer(self):
         """Get appropriate tokenizer"""
@@ -469,11 +474,25 @@ class Evaluator:
             results["inference_times"].append(t_inference)
             
             # Track DyGRAV activation
-            if output.get("dygrav", False):
+            gate_fired = output.get("dygrav", False)
+            if gate_fired:
                 results["triggers"] += 1
                 if "debug_dygrav" in output:
                     t_dygrav = output["debug_dygrav"].get("dygrav_time", 0)
                     results["dygrav_times"].append(t_dygrav)
+            # Gate metrics (if oracle labels provided in episode metadata)
+            oracle_gate = episode.get("oracle_gate", [False] * len(episode["images"]))
+            if step_idx < len(oracle_gate):
+                self._gate_preds.append(1 if gate_fired else 0)
+                self._gate_labels.append(1 if oracle_gate[step_idx] else 0)
+            # Cost accuracy (if expert info present)
+            expert_name = output.get("dygrav_module", None)
+            expert_latency_ms = output.get("dygrav_time_ms", None)
+            if gate_fired and expert_name and expert_latency_ms is not None:
+                est = self.cost_lut.get(expert_name, {}).get("latency_ms", 0)
+                if est > 0:
+                    err = (expert_latency_ms - est) / est
+                    self._cost_errors.append(err)
             
             # Track grounding accuracy if we have GT
             if gt_regions and step_idx < len(gt_regions):
@@ -548,6 +567,8 @@ class Evaluator:
         
         # Print summary
         self._print_summary()
+        # Print gate and cost metrics
+        self._print_gate_and_cost_metrics()
         
         return self.metrics
     
@@ -632,6 +653,36 @@ class Evaluator:
         
         print(f"\n⏱️  Total Time: {self.metrics.total_time:.1f} seconds")
         print(f"{'='*70}")
+
+    def _print_gate_and_cost_metrics(self):
+        print("\n--- Gate Performance ---")
+        if self._gate_labels:
+            try:
+                import numpy as _np
+                preds = _np.array(self._gate_preds)
+                labels = _np.array(self._gate_labels)
+                # Precision/Recall/F1 without sklearn
+                tp = int(((preds == 1) & (labels == 1)).sum())
+                fp = int(((preds == 1) & (labels == 0)).sum())
+                fn = int(((preds == 0) & (labels == 1)).sum())
+                precision = tp / max(1, tp + fp)
+                recall = tp / max(1, tp + fn)
+                f1 = 0.0 if (precision + recall) == 0 else 2 * precision * recall / (precision + recall)
+                print(f"  Gate Precision: {precision:.4f}")
+                print(f"  Gate Recall:    {recall:.4f}")
+                print(f"  Gate F1-Score:  {f1:.4f}")
+            except Exception:
+                print("  Unable to compute gate metrics.")
+        else:
+            print("  No gate decisions were recorded.")
+
+        print("\n--- Cost Accuracy Validation ---")
+        if self._cost_errors:
+            import numpy as _np
+            avg_error = float(_np.mean(self._cost_errors) * 100.0)
+            print(f"  Average Cost Estimation Error: {avg_error:.2f}%")
+        else:
+            print("  No expert costs were recorded.")
 
 
 # Convenience functions for backward compatibility

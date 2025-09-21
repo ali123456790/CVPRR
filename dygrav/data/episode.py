@@ -6,6 +6,10 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 from pathlib import Path
 import numpy as np
 from PIL import Image
+try:
+    import torch
+except Exception:
+    torch = None  # pragma: no cover
 
 try:
     import torch
@@ -24,6 +28,7 @@ class ViewPoint:
     image_path: Optional[str] = None
     features: Optional[Tensor] = None  # Pre-computed visual features
     objects: Optional[List[Dict[str, Any]]] = None  # Object detections/annotations
+    depth_path: Optional[str] = None  # Optional depth map path
 
 
 @dataclass
@@ -173,6 +178,7 @@ class EpisodeBatch:
     
     # Optional fields with defaults
     features: Optional[Tensor] = None  # [batch_size, max_steps, feature_dim]
+    bev_features: Optional[Tensor] = None  # [batch_size, max_steps, bev_dim]
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     @property
@@ -220,11 +226,21 @@ def collate_episodes(episodes: List[Episode],
     path_lengths = [ep.trajectory_length for ep in episodes]
     shortest_paths = [ep.shortest_path_length for ep in episodes]
     
-    # Collect images (with padding)
+    # Collect images (with padding) and optional depth→BEV
     batched_images = []
     batched_actions = []
     batched_positions = []
     batched_grounding = []
+    # Optional visual features: pack to [B, T, 36, D] if available
+    feature_slices: List[List[Optional[np.ndarray]]] = []
+    # Optional BEV vectors per step
+    bev_slices: List[List[Optional[np.ndarray]]] = []
+    # Lazy import BEVBuilder
+    try:
+        from ..modules.bev import BEVBuilder  # type: ignore
+        bev_builder = BEVBuilder()
+    except Exception:
+        bev_builder = None
     
     for ep in episodes:
         # Get images for this episode
@@ -238,6 +254,37 @@ def collate_episodes(episodes: List[Episode],
         ep_images = ep_images[:ep_length]
         ep_actions = ep_actions[:ep_length-1] if ep_actions else []
         ep_positions = ep_positions[:ep_length]
+        # Collect per-step features if present on viewpoints
+        ep_feats: List[Optional[np.ndarray]] = []
+        ep_bev: List[Optional[np.ndarray]] = []
+        for idx_vp in range(ep_length):
+            vp = ep.path[idx_vp]
+            if getattr(vp, "features", None) is not None:
+                feat = vp.features
+                # Accept torch.Tensor or np.ndarray
+                if hasattr(feat, "detach"):
+                    feat = feat.detach().cpu().numpy()
+                ep_feats.append(np.asarray(feat))
+            else:
+                ep_feats.append(None)
+            # Depth→BEV if available
+            if bev_builder is not None and getattr(vp, "depth_path", None):
+                try:
+                    import numpy as _np
+                    depth = None
+                    if vp.depth_path.endswith('.npy'):
+                        depth = _np.load(vp.depth_path)
+                    if depth is not None:
+                        import torch as _torch
+                        depth_t = _torch.from_numpy(depth).float()
+                        bev_vec = bev_builder.build(depth_t)
+                        ep_bev.append(bev_vec.detach().cpu().numpy())
+                    else:
+                        ep_bev.append(None)
+                except Exception:
+                    ep_bev.append(None)
+            else:
+                ep_bev.append(None)
         
         # Pad images with None
         while len(ep_images) < actual_max_length:
@@ -252,11 +299,96 @@ def collate_episodes(episodes: List[Episode],
         while len(ep_positions) < actual_max_length:
             ep_positions.append(last_pos)
         
+        # Pad per-step features list to match length
+        while len(ep_feats) < actual_max_length:
+            ep_feats.append(None)
+        while len(ep_bev) < actual_max_length:
+            ep_bev.append(None)
+
         batched_images.append(ep_images)
         batched_actions.append(ep_actions)
         batched_positions.append(ep_positions)
         batched_grounding.append(ep_grounding)
+        feature_slices.append(ep_feats)
+        bev_slices.append(ep_bev)
     
+    # Build packed feature tensor if any episode has features
+    packed_features = None
+    packed_bev = None
+    try:
+        if any(any(f is not None for f in ep_feats) for ep_feats in feature_slices) and torch is not None:
+            # Determine feature shape (36, D)
+            feat_shape = None
+            for ep_feats in feature_slices:
+                for f in ep_feats:
+                    if f is not None:
+                        if f.ndim == 1:
+                            # Some stores may provide [D] per-view; expand to (36, D) later
+                            feat_shape = (36, f.shape[-1])
+                        elif f.ndim == 2:
+                            feat_shape = (f.shape[0], f.shape[1])
+                        break
+                if feat_shape is not None:
+                    break
+            if feat_shape is None:
+                feat_shape = (36, 2048)
+            B = batch_size
+            T = actual_max_length
+            V, D = feat_shape
+            packed = np.zeros((B, T, V, D), dtype=np.float32)
+            for b, ep_feats in enumerate(feature_slices):
+                for t, f in enumerate(ep_feats):
+                    if f is None:
+                        continue
+                    f_arr = np.asarray(f, dtype=np.float32)
+                    if f_arr.ndim == 1:
+                        # If single-view feature, tile or leave zeros beyond available views
+                        f_arr = np.repeat(f_arr[None, :], V, axis=0)
+                    # Adjust number of views to V=36 by pad/truncate
+                    if f_arr.shape[0] < V:
+                        pad_views = V - f_arr.shape[0]
+                        f_arr = np.vstack([f_arr, np.repeat(f_arr[-1][None], pad_views, axis=0)])
+                    elif f_arr.shape[0] > V:
+                        f_arr = f_arr[:V]
+                    packed[b, t] = f_arr.astype(np.float32)
+            packed_features = torch.from_numpy(packed)
+    except Exception:
+        packed_features = None
+
+    # Pack BEV features [B, T, Dbev]
+    try:
+        if any(any(v is not None for v in ep_bev) for ep_bev in bev_slices) and torch is not None:
+            # Determine bev dim
+            bev_dim = None
+            for ep_bev in bev_slices:
+                for v in ep_bev:
+                    if v is not None:
+                        bev_dim = v.shape[-1]
+                        break
+                if bev_dim is not None:
+                    break
+            bev_dim = bev_dim or 1152
+            B = batch_size
+            T = actual_max_length
+            packedb = np.zeros((B, T, bev_dim), dtype=np.float32)
+            for b, ep_bev in enumerate(bev_slices):
+                for t, v in enumerate(ep_bev):
+                    if v is None:
+                        continue
+                    vv = np.asarray(v, dtype=np.float32)
+                    if vv.shape[-1] != bev_dim:
+                        # truncate or pad
+                        if vv.shape[-1] > bev_dim:
+                            vv = vv[:bev_dim]
+                        else:
+                            pad = np.zeros((bev_dim,), dtype=np.float32)
+                            pad[:vv.shape[-1]] = vv
+                            vv = pad
+                    packedb[b, t] = vv
+            packed_bev = torch.from_numpy(packedb)
+    except Exception:
+        packed_bev = None
+
     return EpisodeBatch(
         episode_ids=episode_ids,
         instructions=instructions,
@@ -271,4 +403,6 @@ def collate_episodes(episodes: List[Episode],
         grounding_annotations=batched_grounding,
         sequence_lengths=sequence_lengths,
         max_length=actual_max_length,
+        features=packed_features,
+        bev_features=packed_bev,
     )

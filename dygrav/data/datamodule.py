@@ -202,18 +202,31 @@ class VLNDataModule:
         )
     
     def val_dataloader(self) -> DataLoader:
-        """Create validation data loader."""
+        """Create validation data loaders for seen and unseen splits."""
+        loaders = []
+        # Seen
         if "val" not in self._datasets:
             self._datasets["val"] = self._create_dataset("val")
-        
-        return DataLoader(
+        loaders.append(DataLoader(
             self._datasets["val"],
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             collate_fn=self._get_collate_fn(),
             pin_memory=True,
-        )
+        ))
+        # Unseen
+        if "val_unseen" not in self._datasets:
+            self._datasets["val_unseen"] = self._create_dataset("val_unseen")
+        loaders.append(DataLoader(
+            self._datasets["val_unseen"],
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            collate_fn=self._get_collate_fn(),
+            pin_memory=True,
+        ))
+        return loaders
     
     def val_unseen_dataloader(self) -> DataLoader:
         """Create validation unseen data loader."""

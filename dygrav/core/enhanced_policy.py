@@ -235,6 +235,8 @@ class EnhancedPolicyWithGate:
         policy_out['dygrav_module'] = gate_output.module
         policy_out['dygrav_cost'] = gate_output.cost
         policy_out['inference_metrics'] = metrics
+        policy_out['bev_used'] = policy_out.get('bev_used', 'bev' in obs)
+        policy_out['bev_ms'] = 0.0  # placeholder if we add BEV timing later
         
         return policy_out
     

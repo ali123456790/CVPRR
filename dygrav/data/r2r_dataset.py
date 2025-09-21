@@ -62,6 +62,7 @@ class R2RDataset(Dataset):
         self.annotations_path = self.data_root / "annotations" / f"R2R_{split}.json"
         self.connectivity_path = self.data_root / "connectivity"
         self.images_path = self.data_root / "images"
+        self.depth_path = self.data_root / "depth"  # optional
         
         # Cache
         self._image_cache = {} if cache_images else None
@@ -127,12 +128,20 @@ class R2RDataset(Dataset):
             
             features = self.feats.get(scan_id, viewpoint_id)
             
+            # Optional depth map path
+            dpath = None
+            if self.depth_path.exists():
+                cand = self.depth_path / scan_id / f"{viewpoint_id}.npy"
+                if cand.exists():
+                    dpath = str(cand)
+
             viewpoint = ViewPoint(
                 viewpoint_id=viewpoint_id,
                 position=position,
                 heading=heading,
                 elevation=item.get('elevation', 0.0) if step_idx == 0 else 0.0,
                 features=features,
+                depth_path=dpath,
             )
             path.append(viewpoint)
         

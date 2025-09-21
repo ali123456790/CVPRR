@@ -1,0 +1,12 @@
+# @package _group_
+_target_: dygrav.backbones.pi0_fast_wrapper.Pi0FastWrapper
+name: pi0_fast
+clip_model: ViT-L-14
+clip_pretrained: openai
+hidden_dim: 512
+num_actions: 4
+use_bev: false
+bev_dim: 64
+device: ${device}
+
+

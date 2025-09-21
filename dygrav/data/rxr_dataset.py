@@ -63,6 +63,7 @@ class RxRDataset(Dataset):
         self.annotations_path = self.data_root / "annotations" / f"rxr_{split}_{language}.jsonl"
         self.connectivity_path = self.data_root / "connectivity"
         self.images_path = self.data_root / "images"
+        self.depth_path = self.data_root / "depth"  # optional depth directory
         self.grounding_path = self.data_root / "grounding" / f"rxr_{split}_{language}_grounding.jsonl"
         
         # Cache
@@ -149,12 +150,20 @@ class RxRDataset(Dataset):
                     else:
                         image_path = None
             
+            # Optional depth map path
+            dpath = None
+            if self.depth_path.exists():
+                cand = self.depth_path / scan_id / f"{viewpoint_id}.npy"
+                if cand.exists():
+                    dpath = str(cand)
+
             viewpoint = ViewPoint(
                 viewpoint_id=viewpoint_id,
                 position=position,
                 heading=heading,
                 elevation=elevation,
                 image_path=str(image_path) if image_path else None,
+                depth_path=dpath,
             )
             path.append(viewpoint)
         

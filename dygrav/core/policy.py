@@ -38,6 +38,7 @@ class PolicyWithDygrav:
 
     def step(self, obs: Dict) -> Dict:
         """One env step. If ambiguous, invoke DyGRAV modules, fuse, and bias the policy."""
+        # Forward fast path / backbone; pass through BEV if supported
         policy_out = self.backbone.step(obs)
         conf = policy_out.get("confidence", 1.0)
         attn_entropy = policy_out.get("attn_entropy", 0.0)
@@ -107,6 +108,12 @@ class PolicyWithDygrav:
 
         policy_out["dygrav"] = bool(dygrav_signal)
         policy_out["debug_dygrav"] = dygrav_signal.debug if dygrav_signal else {}
+
+        # BEV telemetry passthrough
+        if "bev" in obs:
+            policy_out["bev_used"] = True
+        else:
+            policy_out["bev_used"] = False
         
         # Add cache statistics to debug info
         if dygrav_signal and hasattr(dygrav_signal, 'debug'):

@@ -77,33 +77,37 @@ class GateModel(nn.Module):
     
     def _init_module_configs(self):
         """Initialize module configurations with cost look-up tables."""
-        # These are example values - should be measured on actual hardware
+        # Default values (will be overridden by configs/cost_lut.json if present)
         self.module_configs = {
             'none': ModuleConfig(
-                name='none',
-                budgets=[0.0],
-                latency_lut={0.0: 0.0},
-                energy_lut={0.0: 0.0}
+                name='none', budgets=[0.0], latency_lut={0.0: 0.0}, energy_lut={0.0: 0.0}
             ),
             'micro_graph': ModuleConfig(
-                name='micro_graph',
-                budgets=[6.0, 12.0],  # K values
-                latency_lut={6.0: 5.0, 12.0: 8.0},  # ms
-                energy_lut={6.0: 0.01, 12.0: 0.02}  # J
+                name='micro_graph', budgets=[6.0, 12.0], latency_lut={6.0: 5.0, 12.0: 8.0}, energy_lut={6.0: 0.01, 12.0: 0.02}
             ),
             'ver_slice': ModuleConfig(
-                name='ver_slice',
-                budgets=[0.5, 1.0, 1.5],  # radius in meters
-                latency_lut={0.5: 10.0, 1.0: 15.0, 1.5: 22.0},  # ms
-                energy_lut={0.5: 0.02, 1.0: 0.03, 1.5: 0.05}  # J
+                name='ver_slice', budgets=[0.5, 1.0, 1.5], latency_lut={0.5: 10.0, 1.0: 15.0, 1.5: 22.0}, energy_lut={0.5: 0.02, 1.0: 0.03, 1.5: 0.05}
             ),
             'llm_tools': ModuleConfig(
-                name='llm_tools',
-                budgets=[16.0, 48.0],  # token budgets
-                latency_lut={16.0: 20.0, 48.0: 45.0},  # ms
-                energy_lut={16.0: 0.05, 48.0: 0.12}  # J
+                name='llm_tools', budgets=[16.0, 48.0], latency_lut={16.0: 20.0, 48.0: 45.0}, energy_lut={16.0: 0.05, 48.0: 0.12}
             )
         }
+        # Try to load external LUT
+        try:
+            import json, os
+            lut_path = os.environ.get('DYGRAV_COST_LUT', 'configs/cost_lut.json')
+            if os.path.exists(lut_path):
+                with open(lut_path, 'r') as f:
+                    lut = json.load(f)
+                # Map into existing configs (single latency per module -> assign to highest budget)
+                for name, vals in lut.items():
+                    if name in self.module_configs and 'latency_ms' in vals:
+                        cfg = self.module_configs[name]
+                        # Overwrite all entries uniformly
+                        cfg.latency_lut = {b: float(vals['latency_ms']) for b in cfg.budgets}
+                        cfg.energy_lut = {b: float(vals.get('energy_j', 0.0)) for b in cfg.budgets}
+        except Exception:
+            pass
     
     def forward(
         self,
