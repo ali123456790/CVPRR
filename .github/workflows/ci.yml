@@ -10,12 +10,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - name: Install dev deps
+      - name: Install deps
         run: |
           python -m venv .venv
           source .venv/bin/activate
           pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[full,dev]"
       - name: Unit tests
         run: |
           source .venv/bin/activate

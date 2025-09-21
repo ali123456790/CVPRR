@@ -8,33 +8,61 @@ DyGRAV (**Dy**namic **G**rounding & **R**elational **A**gent for **V**LN) is a c
 - **Complete Feature Pipeline** with novelty tracking and skill classification
 - **Production-Ready Code** with comprehensive tests and documentation
 
-> **Status**: Full implementation complete according to mathematical specification. Ready for training and deployment.
+> **Status**: Training pipeline and evaluation are ready. Real‑dataset training requires dataset setup (R2R/RxR) and optional depth for BEV.
 
 ---
 
-## Quickstart (lightweight, runs tests only)
+## Quickstart
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install --upgrade pip
-pip install -e ".[dev]"     # pytest, ruff, black, mypy
-pytest -q                   # all tests should pass
-Full stack (with trainer/eval on synthetic)
-bash
-Copy code
-pip install -e ".[full,dev]"      # adds torch, lightning, open-clip, etc.
 
-# Train (synthetic data; proves end-to-end plumbing)
+# 1) Dev tests only
+pip install -e ".[dev]"
+pytest -q
+
+# 2) Full stack (adds torch/lightning/open-clip, etc.)
+pip install -e ".[full,dev]"
+
+# Synthetic train/eval (sanity check the pipeline)
 python -m dygrav.cli.train
-
-# Evaluate (synthetic; prints trigger rate & GA)
 python -m dygrav.cli.eval
-Expected example:
+```
 
-ini
-Copy code
+Expected example output:
+
+```
 [eval] trigger_rate=1.00  GA=1.00
+```
 (Synthetic path is intentionally “perfect” to validate wiring.)
+
+## Real dataset training (RxR / R2R)
+
+- Ensure datasets follow the documented structure and for R2R link the features TSV to:
+  `dygrav/data/r2r/img_features/ResNet-152-imagenet.tsv`
+
+RxR (English), π₀ fast baseline:
+
+```bash
+bash scripts/train.sh \
+  data=rxr data.root=/ABS/PATH/TO/RXR data.splits.val=val_unseen \
+  model.backbone._target_=dygrav.backbones.pi0_fast_wrapper.Pi0FastWrapper \
+  train.trainer.logger=true train.trainer.max_epochs=5 train.seed=17
+```
+
+R2R (requires TSV link):
+
+```bash
+bash scripts/train.sh \
+  data=r2r data.root=/ABS/PATH/TO/R2R data.splits.val=val_unseen \
+  model.backbone._target_=dygrav.backbones.pi0_fast_wrapper.Pi0FastWrapper \
+  train.trainer.logger=true train.trainer.max_epochs=5 train.seed=17
+```
+
+Notes:
+- Selection criterion: choose the best model by highest `val/spl` on `val_unseen`.
+- Log and report `val/sr`, `val/spl`, `val/ne` during validation.
 
 ## Repository Structure
 
@@ -97,6 +125,8 @@ NE (Navigation Error, meters).
 
 GA (Grounding Accuracy) — % steps where chosen referent IoU ≥ τ w.r.t. annotated referent.
 Report GA by category: attributes vs relations.
+
+Model selection: select checkpoints by highest `val/spl` on the `val_unseen` split.
 
 Pilot Success Targets (vs. strong transformer baseline on RxR-FG):
 
