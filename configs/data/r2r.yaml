@@ -1,0 +1,14 @@
+name: r2r
+root: ./data/r2r
+batch_size: 8
+num_workers: 4
+max_episodes: null
+max_path_length: 20
+load_images: true
+cache_images: false
+language: en
+splits:
+  train: train
+  val: val_seen
+  val_unseen: val_unseen
+  test: test

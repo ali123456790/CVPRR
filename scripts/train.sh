@@ -1,3 +1,8 @@
 #!/usr/bin/env bash
 set -e
-echo "[stub] Training entrypoint — enable Hydra/Lightning when full stack is installed."
+
+# Ensure the project is in the Python path
+export PYTHONPATH=$(pwd):$PYTHONPATH
+
+echo "Starting DyGRAV training..."
+python -m dygrav.cli.train "$@"

@@ -1,2 +1,13 @@
+# @package _group_
+_target_: dygrav.backbones.hamt_wrapper.HAMTWrapper
 name: hamt_backbone
-hidden_dim: 768
+
+# Model parameters
+feature_dim: 2048
+hidden_dim: 512
+num_layers: 4
+num_heads: 4
+dropout: 0.1
+num_actions: 4
+use_history: true
+checkpoint_path: null

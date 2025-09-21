@@ -1,0 +1,15 @@
+name: rxr
+root: ./data/rxr
+batch_size: 8
+num_workers: 4
+max_episodes: null
+max_path_length: 30
+load_images: true
+cache_images: false
+language: en
+include_grounding: false
+splits:
+  train: train
+  val: val_seen
+  val_unseen: val_unseen
+  test: test

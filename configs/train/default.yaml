@@ -1,5 +1,12 @@
+name: "dygrav_train_run"
+
+seed: 42
+lr: 1e-4
+
 trainer:
-  max_epochs: 1
+  accelerator: "auto"
+  devices: 1
+  max_epochs: 2
   precision: 16
-optimizer:
-  lr: 1e-4
+  enable_checkpointing: false
+  logger: false

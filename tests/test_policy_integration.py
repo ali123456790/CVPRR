@@ -1,3 +1,4 @@
+import numpy as np
 from PIL import Image
 from dygrav.core.policy import PolicyWithDygrav
 from dygrav.detectors.yolo import SimpleDetector
@@ -29,7 +30,7 @@ def test_policy_triggers_dygrav_and_biases_output():
         vlm_cfg={"model_name":"ViT-L-14", "pretrained":"openai", "device":"cpu"},
         sg_cfg={"next_to_thresh":0.5},
     )
-    obs = {"rgb": Image.new("RGB", (200, 100), color=(255,255,255))}
+    obs = {"rgb": np.array(Image.new("RGB", (200, 100), color=(255,255,255)))}
     out = policy.step(obs)
     assert out["dygrav"] is True
     assert out.get("biased", False) is True

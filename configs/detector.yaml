@@ -1,0 +1,39 @@
+# YOLOv10-n Detector Configuration
+# Week-1 Sprint Plan Implementation
+
+impl: yolo_v10_n
+model_path: yolov10n.pt
+precision: fp16
+input_size: 640
+conf_thresh: 0.25
+iou_thresh: 0.6
+device: auto  # auto, cuda, cpu
+use_tensorrt: true
+verbose: false
+
+# Fallback configuration for smaller input size if latency > 20ms
+fallback:
+  input_size: 512
+  model_path: yolov10s.pt  # Switch to smaller model if needed
+
+# Latency requirements (hard gate)
+latency:
+  max_median_ms: 20
+  target_gpu: ["A100", "RTX4090", "V100"]
+  batch_size: 1
+
+# Fine-tuning configuration (Stage-2)
+finetune:
+  enabled: false
+  indoor_datasets:
+    - matterport3d
+    - sun_rgbd
+    - scannet
+  epochs: 50
+  lr: 0.001
+  batch_size: 16
+  augmentation:
+    - rotation
+    - brightness
+    - contrast
+    - blur

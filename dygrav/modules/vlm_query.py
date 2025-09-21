@@ -1,5 +1,6 @@
 from typing import List, Optional
 from ..core.types import Region, VLMResult
+import numpy as np
 
 class VLMQuery:
     """Rank candidate crops against a text phrase.
@@ -29,7 +30,7 @@ class VLMQuery:
             return []
         xs = [((r.x1 + r.x2) / 2.0) for r in regions]
         m = max(max(xs), 1.0)
-        return [VLMResult(i, text, float(xs[i] / m)) for i in range(len(regions))]
+        return [VLMResult(region, float(xs[i] / m), text) for i, region in enumerate(regions)]
 
     def score(self, image_pil, regions: List[Region], text: str) -> List[VLMResult]:
         if self._backend != "openclip":
@@ -37,6 +38,11 @@ class VLMQuery:
 
         # OpenCLIP path
         import torch  # type: ignore
+        from PIL import Image
+        
+        if isinstance(image_pil, np.ndarray):
+            image_pil = Image.fromarray(image_pil)
+
         crops = [image_pil.crop((r.x1, r.y1, r.x2, r.y2)) for r in regions]
         images = torch.stack([self._preprocess(c) for c in crops]).to(self.device)
         text_tok = self._tokenizer([text]).to(self.device)
@@ -46,4 +52,4 @@ class VLMQuery:
             img_feat = img_feat / img_feat.norm(dim=-1, keepdim=True)
             txt_feat = txt_feat / txt_feat.norm(dim=-1, keepdim=True)
             scores = (img_feat @ txt_feat.T).squeeze(-1)
-        return [VLMResult(i, text, float(scores[i].item())) for i in range(len(regions))]
+        return [VLMResult(r, float(scores[i].item()), text) for i, r in enumerate(regions)]

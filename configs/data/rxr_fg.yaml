@@ -1,0 +1,16 @@
+name: rxr_fg
+root: ./data/rxr
+batch_size: 8
+num_workers: 4
+max_episodes: null
+max_path_length: 25
+load_images: true
+cache_images: false
+language: en
+include_grounding: true
+criteria_file: ./data/rxr/rxr_fg_criteria.json
+splits:
+  train: train
+  val: val_seen
+  val_unseen: val_unseen
+  test: test

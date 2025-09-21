@@ -1,0 +1,37 @@
+# OpenCLIP ViT-L/14 VLM Configuration
+
+# Model configuration
+model: "ViT-L-14"
+pretrained: "openai"
+device: "auto"  # auto, cpu, cuda
+
+# Optimization settings
+precalc_text: true
+image_norm: "openai"
+max_crops_per_batch: 64
+cache_text_embeddings: true
+
+# Performance settings
+warmup_steps: 3
+enable_amp: false  # Automatic Mixed Precision
+
+# Latency requirements
+target_latency_ms: 8.0  # For 32 crops
+benchmark_crops: 32
+benchmark_trials: 20
+
+# Similarity testing
+similarity_threshold: 0.8  # Pass rate for monotonic tests
+test_pairs:
+  positive:
+    - ["cat image", "cat"]
+    - ["dog image", "dog"] 
+    - ["car image", "car"]
+    - ["chair image", "chair"]
+    - ["table image", "table"]
+  negative:
+    - ["cat image", "dog"]
+    - ["dog image", "cat"]
+    - ["car image", "bicycle"]
+    - ["chair image", "table"]
+    - ["table image", "chair"]

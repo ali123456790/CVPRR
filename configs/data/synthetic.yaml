@@ -1,0 +1,6 @@
+# @package _group_
+dataset_name: "synthetic"
+batch_size: 16
+num_workers: 4
+max_episodes: 256
+seed: ${train.seed}

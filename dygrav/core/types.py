@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Tuple, Optional, Dict, Any
 
 try:
@@ -11,15 +11,37 @@ except Exception:  # pragma: no cover
 @dataclass(frozen=True)
 class Region:
     """Axis-aligned bounding box in image coords."""
-    x1: int; y1: int; x2: int; y2: int
+    xyxy: Tuple[int, int, int, int]  # (x1, y1, x2, y2)
     score: float
-    cls: Optional[str] = None  # detector label if any
+    label: str  # detector label
+    
+    # Backward compatibility properties
+    @property
+    def x1(self) -> int:
+        return self.xyxy[0]
+    
+    @property
+    def y1(self) -> int:
+        return self.xyxy[1]
+    
+    @property
+    def x2(self) -> int:
+        return self.xyxy[2]
+    
+    @property
+    def y2(self) -> int:
+        return self.xyxy[3]
+    
+    @property
+    def cls(self) -> str:
+        return self.label
 
 @dataclass(frozen=True)
 class VLMResult:
-    region_idx: int
-    text: str
+    region: Region
     score: float
+    phrase: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class RelationEdge:

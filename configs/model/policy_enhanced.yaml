@@ -1,0 +1,21 @@
+# @package _group_
+_target_: dygrav.core.enhanced_policy.EnhancedPolicyWithGate
+
+# Instantiate the detector from detector group settings
+# Uses dygrav.detectors.yolo.YoloV10Detector
+# Note: If YOLO dependencies are unavailable, it falls back internally.
+detector:
+  _target_: dygrav.detectors.yolo.YoloV10Detector
+  model_path: ${detector.model_path}
+  precision: ${detector.precision}
+  input_size: ${detector.input_size}
+  conf_thresh: ${detector.conf_thresh}
+  iou_thresh: ${detector.iou_thresh}
+  device: ${detector.device}
+  use_tensorrt: ${detector.use_tensorrt}
+  verbose: ${detector.verbose}
+
+use_learned_gate: false
+skill_classifier_type: "rule"
+log_metrics: true
+

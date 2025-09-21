@@ -1,15 +1,17 @@
 defaults:
-  - data: rxr
-  - model: backbone_hamt
-  - model@dygrav: dygrav
-  - vlm: openclip_vitL14
+  - data: synthetic
+  - model: default
+  - detector: detector
+  - vlm: vlm
   - train: default
-  - eval: rxr_fg
+  - _self_
 
-seed: 17
+# Global settings
+seed: ${train.seed} # Use the seed from the training config
 device: cuda
 precision: 16
 
+# Logging configuration
 logging:
   level: INFO
   jsonl: true

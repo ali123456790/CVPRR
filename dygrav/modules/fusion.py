@@ -8,8 +8,7 @@ class DygravFusion:
         if not regions or not vlm: 
             return None
         top = max(vlm, key=lambda r: r.score)
-        chosen = regions[top.region_idx]
-        return chosen
+        return top.region
 
     def build_signal(self, regions, vlm, rels) -> DygravSignal:
         chosen = self.select_region(regions, vlm, rels)

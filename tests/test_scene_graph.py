@@ -4,9 +4,9 @@ from dygrav.core.types import Region
 def test_scene_graph_edges_present():
     sg = SceneGraphBuilder(next_to_thresh=10.0)  # huge to force next_to
     regs = [
-        Region(0,0,10,10,0.9),   # center ~ (5,5)
-        Region(12,0,22,10,0.9),  # center ~ (17,5)
-        Region(30,0,40,10,0.9),  # center ~ (35,5)
+        Region(xyxy=(0,0,10,10), score=0.9, label="obj1"),   # center ~ (5,5)
+        Region(xyxy=(12,0,22,10), score=0.9, label="obj2"),  # center ~ (17,5)
+        Region(xyxy=(30,0,40,10), score=0.9, label="obj3"),  # center ~ (35,5)
     ]
     edges = sg.build(regs)
     rel_types = {e.rel_type for e in edges}

@@ -1,0 +1,6 @@
+# @package _group_
+
+defaults:
+  - backbone: backbone_hamt
+  - policy: policy_enhanced
+
