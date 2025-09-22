@@ -233,8 +233,7 @@ Open PRs against main. Use conventional commits:
 
 feat: ..., fix: ..., chore: ..., docs: ..., test: ...
 
-License
-MIT
+
 
 yaml
 Copy code
